@@ -1,23 +1,39 @@
-# SignFlow - Dependencias
+# SignFlow v2 — Plataforma Empresarial de Firma Digital
 # pip install -r requirements.txt
 
-# Documentos Office
+# ── Seguridad ──────────────────────────────────────────────────────────────
+bcrypt>=4.1.3
+argon2-cffi>=23.1.0
+python-jose[cryptography]>=3.3.0   # JWT
+passlib[bcrypt]>=1.7.4
+
+# ── API ────────────────────────────────────────────────────────────────────
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.7.0
+pydantic-settings>=2.2.0
+python-multipart>=0.0.9
+
+# ── Documentos Office ──────────────────────────────────────────────────────
 python-docx>=1.1.0
 openpyxl>=3.1.2
 python-pptx>=0.6.23
 
-# PDF
+# ── PDF ────────────────────────────────────────────────────────────────────
 reportlab>=4.1.0
-PyMuPDF>=1.24.0          # fitz
+PyMuPDF>=1.24.0
 
-# API REST
-fastapi>=0.111.0
-uvicorn[standard]>=0.29.0
-pydantic>=2.7.0
-python-multipart>=0.0.9  # para UploadFile en FastAPI
+# ── QR ─────────────────────────────────────────────────────────────────────
+qrcode[pil]>=7.4.2
+Pillow>=10.3.0
 
-# Build
+# ── Base de datos ──────────────────────────────────────────────────────────
+# SQLite viene con Python — no requiere instalación adicional
+
+# ── Build ──────────────────────────────────────────────────────────────────
 pyinstaller>=6.6.0
 
-# (opcional) Hashing adicional / QR
-# qrcode[pil]>=7.4.2
+# ── Tests ──────────────────────────────────────────────────────────────────
+pytest>=8.2.0
+pytest-asyncio>=0.23.0
+httpx>=0.27.0              # test client para FastAPI
