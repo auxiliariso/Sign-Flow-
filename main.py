@@ -19,7 +19,7 @@ import sys
 import argparse
 import threading
 
-from infrastructure.database.db_manager import DatabaseManager
+from database.db_manager import DatabaseManager
 
 
 def main():
@@ -72,7 +72,7 @@ def _start_api(host, port, db):
 
 
 def _run_verify(filepath: str, db_path: str):
-    from infrastructure.database.db_manager import DatabaseManager
+    from database.db_manager import DatabaseManager
     from core.verification_service import VerificationService
     db = DatabaseManager(db_path=db_path)
     db.initialize()
