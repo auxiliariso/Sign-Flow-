@@ -1,9 +1,6 @@
 """
-core/document_service.py  (v2.1)
-================================
-- Usa hora LOCAL del sistema para fecha/hora visible en la firma
-- Usa hora UTC solo para el hash encadenado (integridad criptográfica)
-- firma_hash_short → formato compacto "a4b7…cda1" (4+4)
+core/document_service.py  (v2.4)
+Fix: sig_record ahora incluye documento_path y tipo_documento.
 """
 import shutil
 from pathlib import Path
@@ -18,28 +15,31 @@ class DocumentService:
 
     def __init__(self, db):
         self._db = db
-        self._qr  = QRService()
-        self._h   = HashService()
+        self._qr = QRService()
+        self._h  = HashService()
 
     def sign_document(self, doc_path: str, output_path: str, user) -> dict:
         doc_path    = str(Path(doc_path).resolve())
         output_path = str(Path(output_path).resolve())
 
-        doc_record  = self._db.doc_repo.get_or_create(
+        # 1. Registrar o recuperar documento en BD
+        doc_record = self._db.doc_repo.get_or_create(
             filepath=doc_path, created_by=user.id_user
         )
-        prev_sigs  = self._db.sig_repo.get_by_document(doc_record["id_document"])
+
+        # 2. Firmas previas
+        prev_sigs   = self._db.sig_repo.get_by_document(doc_record["id_document"])
         hash_previo = prev_sigs[-1]["firma_hash"] if prev_sigs else "0"
 
-        source        = output_path if Path(output_path).exists() else doc_path
+        # 3. Hash del archivo origen
+        source         = output_path if Path(output_path).exists() else doc_path
         documento_hash = self._h.file_hash(source)
+        timestamp_utc  = self._h.now_utc()
 
-        # UTC para la cadena criptográfica
-        timestamp_utc = self._h.now_utc()
-
-        # LOCAL para lo que el usuario ve
+        # 4. Hora LOCAL visible al usuario
         fecha_local, hora_local = self._h.local_date_time()
 
+        # 5. Hash encadenado
         firma_hash = self._h.signature_hash(
             documento_hash=documento_hash,
             id_user=user.id_user,
@@ -47,25 +47,29 @@ class DocumentService:
             hash_previo=hash_previo,
         )
 
+        # 6. QR y validation ID
         next_index    = self._db.sig_repo.count() + 1
         validation_id = self._h.generate_validation_id(next_index)
         qr_bytes      = self._qr.generate(validation_id, firma_hash)
 
+        # 7. Payload de la firma
         payload = SignaturePayload(
             id_firma         = next_index,
             validation_id    = validation_id,
             nombre_completo  = user.nombre_completo,
             nombre_puesto    = user.nombre_puesto,
             firma_hash       = firma_hash,
-            firma_hash_short = self._h.short_hash(firma_hash),   # "a4b7…cda1"
-            fecha            = fecha_local,    # hora local
-            hora             = hora_local,     # hora local
+            firma_hash_short = self._h.short_hash(firma_hash),
+            fecha            = fecha_local,
+            hora             = hora_local,
             timestamp_utc    = timestamp_utc,
             qr_image_bytes   = qr_bytes,
         )
 
+        # 8. Payloads previos para el bloque acumulativo
         prev_payloads = [self._sig_to_payload(s) for s in prev_sigs]
 
+        # 9. Llamar al firmador
         signer = get_signer(doc_path)
         if not Path(output_path).exists():
             shutil.copy2(doc_path, output_path)
@@ -77,6 +81,11 @@ class DocumentService:
             all_previous = prev_payloads,
         )
 
+        # 10. Tipo de documento
+        ext  = Path(doc_path).suffix.lstrip(".").lower()
+        tipo = {"doc": "docx", "xls": "xlsx", "ppt": "pptx"}.get(ext, ext)
+
+        # 11. Guardar en BD — incluye documento_path y tipo_documento
         sig_record = {
             "id_document"        : doc_record["id_document"],
             "id_user"            : user.id_user,
@@ -91,17 +100,24 @@ class DocumentService:
             "hora"               : hora_local,
             "timestamp_utc"      : timestamp_utc,
             "qr_data"            : validation_id,
+            "documento_path"     : result.output_path,   # ← fix
+            "tipo_documento"     : tipo,                 # ← fix
         }
         saved = self._db.sig_repo.save(sig_record)
 
+        # 12. Actualizar hash del documento en BD
         self._db.doc_repo.update_hash(
             id_document = doc_record["id_document"],
             hash_actual = result.documento_hash_post,
             version     = len(prev_sigs) + 1,
         )
 
-        return {**saved, "output_path": result.output_path,
-                "validation_id": validation_id}
+        return {
+            **saved,
+            "output_path"  : result.output_path,
+            "validation_id": validation_id,
+            "firma_hash"   : firma_hash,
+        }
 
     def _sig_to_payload(self, sig: dict) -> SignaturePayload:
         return SignaturePayload(

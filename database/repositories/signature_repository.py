@@ -1,5 +1,6 @@
 """
-database/repositories/signature_repository.py
+database/repositories/signature_repository.py  (v2.4)
+Fix: documento_path y tipo_documento ahora se incluyen en el INSERT.
 """
 from typing import Optional
 
@@ -10,35 +11,58 @@ class SQLiteSignatureRepository:
         self._db = db
 
     def save(self, record) -> object:
-        """Acepta tanto entidad SignatureRecord como dict."""
         if isinstance(record, dict):
             return self._save_dict(record)
         return self._save_entity(record)
 
     def _save_dict(self, d: dict) -> dict:
+        # Todas las columnas posibles — None si no vienen en el dict
         cols = [
-            "id_document", "id_user", "nombre_completo", "nombre_puesto",
-            "firma_hash", "hash_previo", "documento_hash", "documento_hash_post",
-            "validation_id", "fecha", "hora", "timestamp_utc", "qr_data",
+            "id_document",
+            "id_user",
+            "nombre_completo",
+            "nombre_puesto",
+            "firma_hash",
+            "hash_previo",
+            "documento_hash",
+            "documento_hash_post",
+            "validation_id",
+            "fecha",
+            "hora",
+            "timestamp_utc",
+            "qr_data",
+            "documento_path",      # ← antes faltaba
+            "tipo_documento",      # ← antes faltaba
         ]
         vals = [d.get(c) for c in cols]
+        ph   = ", ".join(["?"] * len(cols))
+
         with self._db.get_conn() as conn:
             cur = conn.execute(
-                f"INSERT INTO signatures ({', '.join(cols)}) "
-                f"VALUES ({', '.join(['?']*len(cols))})",
+                f"INSERT INTO signatures ({', '.join(cols)}) VALUES ({ph})",
                 vals,
             )
             d["id_firma"] = cur.lastrowid
             return d
 
     def _save_entity(self, record) -> object:
+        """Compatibilidad con entidad SignatureRecord (tests)."""
         with self._db.get_conn() as conn:
             cur = conn.execute(
                 "INSERT INTO signatures "
                 "(id_user, nombre_completo, nombre_puesto, firma_hash, "
-                " fecha, hora) VALUES (?, ?, ?, ?, ?, ?)",
-                (record.id_user, record.nombre_completo, record.nombre_puesto,
-                 record.firma_hash, record.fecha, record.hora),
+                " fecha, hora, documento_path, tipo_documento) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    record.id_user,
+                    record.nombre_completo,
+                    record.nombre_puesto,
+                    record.firma_hash,
+                    record.fecha,
+                    record.hora,
+                    getattr(record, "documento_path", None),
+                    getattr(record, "tipo_documento", None),
+                ),
             )
             record.id_firma = cur.lastrowid
             return record
@@ -75,4 +99,6 @@ class SQLiteSignatureRepository:
 
     def count(self) -> int:
         with self._db.get_conn() as conn:
-            return conn.execute("SELECT COUNT(*) FROM signatures").fetchone()[0]
+            return conn.execute(
+                "SELECT COUNT(*) FROM signatures"
+            ).fetchone()[0]
