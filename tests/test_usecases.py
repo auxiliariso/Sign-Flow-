@@ -84,7 +84,7 @@ def test_save_and_list_signature(sig_repo):
 
     results = sig_repo.get_by_user(1)
     assert len(results) == 1
-    assert results[0].firma_hash == record.firma_hash
+    assert results[0]["firma_hash"] == record.firma_hash
 
 
 def test_list_all_signatures(sig_repo):
