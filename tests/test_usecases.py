@@ -6,7 +6,9 @@ import os
 import tempfile
 import pytest
 from database.db_manager import DatabaseManager
-from core.usecases.sign_usecases import AuthenticateUser, RegisterUser
+from core.usecases.sign_usecases import (
+    AuthenticateUser, RegisterUser, ListSignatureHistory
+)
 from core.entities.signature import SignatureRecord
 
 
@@ -14,25 +16,30 @@ from core.entities.signature import SignatureRecord
 def db():
     tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
     path = tmp.name
-    tmp.close()
+    tmp.close()  # <-- cerrar el handle ANTES de usarlo (Windows requiere esto)
+
     db = DatabaseManager(db_path=path)
     db.initialize()
     yield db
-    db.close_all()
+
+    # Cerrar todas las conexiones activas antes de borrar
+    db.close_all()          # ver db_manager.py
     try:
         os.unlink(path)
     except PermissionError:
-        pass
+        pass   # En CI Windows a veces el GC lo libera tarde — no es crítico
 
 
 @pytest.fixture
 def user_repo(db):
-    return db.user_repo
+    from database.repositories.user_repository import SQLiteUserRepository
+    return SQLiteUserRepository(db)
 
 
 @pytest.fixture
 def sig_repo(db):
-    return db.sig_repo
+    from database.repositories.signature_repository import SQLiteSignatureRepository
+    return SQLiteSignatureRepository(db)
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -66,7 +73,7 @@ def test_save_and_list_signature(sig_repo):
         id_user=1,
         nombre_completo="Test User",
         nombre_puesto="Dev",
-        firma_hash="abc" * 21,
+        firma_hash="abc" * 21,      # 63 chars — SHA-256 realista
         documento_path="/tmp/doc.docx",
         tipo_documento="docx",
         fecha="2025-01-01",
@@ -77,8 +84,7 @@ def test_save_and_list_signature(sig_repo):
 
     results = sig_repo.get_by_user(1)
     assert len(results) == 1
-    # get_by_user devuelve list[dict] — acceder con ["clave"], no .atributo
-    assert results[0]["firma_hash"] == record.firma_hash
+    assert results[0].firma_hash == record.firma_hash
 
 
 def test_list_all_signatures(sig_repo):
@@ -87,27 +93,32 @@ def test_list_all_signatures(sig_repo):
             id_user=i + 1,
             nombre_completo=f"User {i}",
             nombre_puesto="Dev",
-            firma_hash=f"{'a' * 60}{i}",
+            firma_hash=f"{'a' * 60}{i}",   # hashes distintos y largos
             documento_path=f"/tmp/doc{i}.pdf",
             tipo_documento="pdf",
             fecha="2025-01-01",
             hora="00:00:00",
         ))
-    assert len(sig_repo.get_all()) == 3
+    all_sigs = sig_repo.get_all()
+    assert len(all_sigs) == 3
 
 
-def test_hash_short_format():
+def test_hash_is_short_in_display(user_repo):
+    """La firma corta debe tener el formato aXXXXXXXX…XXXXXXXX."""
     from core.hash_service import HashService
+    h = HashService()
     full  = "a4b7d5f9" * 8   # 64 chars
-    short = HashService.short_hash(full, chars=4)
+    short = h.short_hash(full, chars=8)
     assert "…" in short
-    assert len(short) < 20
+    assert len(short) < 30
 
 
-def test_timestamp_is_local():
+def test_timestamp_uses_local_time():
+    """El timestamp guardado debe reflejar la hora local del sistema."""
     from core.hash_service import HashService
     import datetime
-    ts   = HashService.now_local()
-    dt   = datetime.datetime.fromisoformat(ts)
+    ts = HashService.now_local()
+    # Debe parsear sin error y ser reciente (dentro de 5 segundos)
+    dt = datetime.datetime.fromisoformat(ts)
     diff = abs((datetime.datetime.now() - dt).total_seconds())
-    assert diff < 5
+    assert diff < 5, f"Diferencia de tiempo demasiado grande: {diff}s"

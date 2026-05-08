@@ -1,0 +1,51 @@
+{
+  "_descripcion": "Configuración de placeholders para el formato F09_P_P_SGI_03",
+  "_version": "1.0",
+  "formato_id": "F09_P_P_SGI_03",
+  "nombre_formato": "Procedimiento de Compras QS",
+  "extension_esperada": ".xlsx",
+
+  "placeholders": {
+    "{{RESPONSABLES}}": {
+      "descripcion": "Nombre(s) del/los responsable(s)",
+      "fuente_bd": "tabla_users",
+      "campo_bd": "nombre_completo",
+      "comparar_con": "sesion_activa",
+      "modo_insercion": "expand_rows",
+      "max_por_celda": 1
+    },
+    "{{PUESTO}}": {
+      "descripcion": "Cargo / puesto del responsable",
+      "fuente_bd": "tabla_users",
+      "campo_bd": "nombre_puesto",
+      "comparar_con": "sesion_activa",
+      "modo_insercion": "inline"
+    },
+    "{{FIRMA_DIGITAL}}": {
+      "descripcion": "Hash corto de la firma digital (4+4 chars)",
+      "fuente_bd": "tabla_signatures",
+      "campo_bd": "firma_hash",
+      "comparar_con": "sesion_activa_y_responsable",
+      "modo_insercion": "hash_corto",
+      "formato_visual": "#{hash_corto}",
+      "mostrar_completo": false
+    }
+  },
+
+  "estilos": {
+    "color_header":     "#1F3864",
+    "color_subtitulo":  "#2E5090",
+    "color_datos":      "#1A1A2E",
+    "color_hash":       "#6B7A99",
+    "font_name":        "Calibri",
+    "font_size_header": 10,
+    "font_size_datos":  9,
+    "font_size_hash":   8
+  },
+
+  "notas": [
+    "Si hay varios responsables, se expanden filas adicionales automáticamente.",
+    "{{FIRMA_DIGITAL}} nunca muestra el hash completo en la celda visible.",
+    "El hash completo queda en la BD y en los metadatos del documento."
+  ]
+}
